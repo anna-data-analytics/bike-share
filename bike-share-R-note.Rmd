@@ -1,0 +1,134 @@
+# Bike Share Project
+
+## Step 1: Load the Required Packages
+
+```{r}
+install.packages('tidyverse')
+install.packages("geosphere")
+library(lubridate)
+library(tidyverse)
+library(dplyr)
+library(geosphere)
+library(ggplot2)
+```
+
+## Step 2: Prepare the data
+
+Download 12 CSV files and combine them into 1 Data Frame
+
+```{r}
+setwd("C:/data/Data Course/Bikeshare/Process")
+
+all_rides <-
+  list.files(path = "C:/data/Data Course/Bikeshare/Process", pattern = "*.csv") %>% 
+  map_df(~read_csv(.))
+
+summary(all_rides)
+```
+
+## Step 3: Cleaning Data
+
+Check for NA values and duplicates.
+
+```{r}
+sum(duplicated(all_rides))
+sum(is.na(all_rides))
+```
+
+No duplication but more than half of rows have at least one NA value.
+
+-   filter the rows with started_at before ended_at
+
+-   filter out the rows with NA started_at and ended_at
+
+-   filter out the rows with NA start_lng, start_lat, end_lng, end_lat
+
+-   filter out the rows with NA start_station_name
+
+```{r}
+all_rides_v2 <- all_rides %>%
+  filter(!is.na(start_station_name))%>%
+  filter(!is.na(started_at)) %>% 
+  filter(!is.na(ended_at)) %>%
+  filter(started_at < ended_at)%>%
+  filter(!is.na(start_lng)) %>%
+  filter(!is.na(start_lat)) %>% 
+  filter(!is.na(end_lng)) %>% 
+  filter(!is.na(end_lat))   
+  
+summary(all_rides_v2)
+```
+
+## Step 4: Add a column for the length of each ride, filter the rides that have the length less than 1 min
+
+```{r}
+all_rides_v2$ride_length <- difftime(all_rides_v2$ended_at, all_rides_v2$started_at, units="mins")
+
+all_rides_v3 <- all_rides_v2 %>%
+  filter(ride_length > 1)
+summary(all_rides_v3)
+```
+
+## Step 5: Add a column shows the day in the week and a column shows the month of each ride
+
+```{r}
+all_rides_v3$weekday <- weekdays(all_rides_v3$started_at)
+all_rides_v3$month <- format(all_rides_v3$started_at, format="%m")
+head(all_rides_v3)
+```
+
+## Step 6: Analyze
+
+See the different types of bikes used by member and casual riders
+
+```{r}
+all_rides_v3 %>%
+group_by(member_casual, rideable_type) %>%
+summarise(rideable_type_total = n())
+
+all_rides_v3 %>%
+  group_by(member_casual, rideable_type) %>%
+  summarise(rideable_type_total = n())  %>%
+  ggplot(aes(fill = rideable_type, y = rideable_type_total, x = member_casual)) + geom_bar(position='stack', stat = 'identity')  + labs(x = 'member_casual', y = 'rideable_type_total', title = 'Different types of bikes used by member and casual riders') + scale_y_continuous(name = "Number of Rides", labels = scales::comma)
+```
+
+Visualize the number of rides by rider types
+
+```{r}
+all_rides_v3 %>%
+  group_by(member_casual) %>%
+  summarise(total_rider_type = n()) %>%
+  ggplot(aes(x=member_casual, y=total_rider_type, fill=member_casual)) + geom_col(position="dodge") + geom_text(aes(label=total_rider_type, vjust=-0.5)) + scale_y_continuous(name = "Number of Rides", labels = scales::comma)
+```
+
+Visualize the number of the trips by user types on different days of the week
+
+```{r}
+all_rides_v3$day_of_week <- ordered(all_rides_v3$weekday, levels=c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+all_rides_v3 %>%
+  group_by(member_casual, day_of_week) %>%
+  summarise(number_of_rides=n(), average_duration=mean(ride_length)) %>%
+  arrange(member_casual, day_of_week) %>%
+  ggplot(aes(x=day_of_week, y=number_of_rides, fill=member_casual)) + geom_col(position="dodge") + scale_y_continuous(name = "Number of Rides", labels = scales::comma)
+```
+
+Visualize the number of trips by user types in different months
+
+```{r}
+all_rides_v3 %>%
+  group_by(member_casual, month) %>%
+  summarise(number_of_rides=n()) %>%
+  arrange(member_casual, month) %>%
+  ggplot(aes(x=month, y=number_of_rides, fill=member_casual)) + geom_col(position="dodge") + scale_y_continuous(name = "Number of Rides", labels = scales::comma)
+```
+
+Determine the most popular start stations
+
+```{r}
+Top_5_Start_Station_Names <- all_rides_v3 %>%
+  count(start_station_name) %>%
+  arrange(desc(n)) %>%
+  slice(1:10)
+view(Top_5_Start_Station_Names)
+```
